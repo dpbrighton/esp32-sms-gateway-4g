@@ -1,0 +1,32 @@
+# ESP-IDF build output
+build/
+sdkconfig
+sdkconfig.old
+
+# Component manager downloads
+managed_components/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Local scripts (contain machine-specific paths)
+monitor.sh
+wifi_monitor.sh
+ota_server.sh
+install_macos.sh
+
+# Desktop shortcuts
+*.app
+*.pdf
+start_*.sh
