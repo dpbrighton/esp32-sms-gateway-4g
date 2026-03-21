@@ -122,7 +122,7 @@ static const char *INDEX_HTML =
 "const body=document.getElementById('body').value.trim();"
 "if(!to||!body){toast('Fill in number and message');return;}"
 "const r=await fetch('/api/sms/send',{method:'POST',"
-"headers:{'Content-Type':'application/json','Authorization':'Bearer YOUR_API_KEY'},"
+"headers:{'Content-Type':'application/json','Authorization':'Bearer %%API_KEY%%'},"
 "body:JSON.stringify({to,body})});"
 "const j=await r.json();"
 "if(j.success){toast('SMS sent!');document.getElementById('body').value='';"
@@ -162,7 +162,7 @@ static const char *INDEX_HTML =
 "if(!confirm('Flash firmware from: '+url+'?'))return;"
 "document.getElementById('otastatus').textContent='Starting OTA...';"
 "const r=await fetch('/api/ota/update',{method:'POST',"
-"headers:{'Content-Type':'application/json','Authorization':'Bearer YOUR_API_KEY'},"
+"headers:{'Content-Type':'application/json','Authorization':'Bearer %%API_KEY%%'},"
 "body:JSON.stringify({url})});"
 "const j=await r.json();"
 "if(j.success){"
@@ -203,8 +203,44 @@ void web_server_ws_broadcast_sms(const sms_message_t *msg)
 
 static esp_err_t handler_index(httpd_req_t *req)
 {
+    gw_config_t *cfg = gw_config_get();
+
+    /* Replace %%API_KEY%% placeholder with real key from config */
+    const char *placeholder = "%%API_KEY%%";
+    const char *key = cfg->api_key;
+    size_t html_len = strlen(INDEX_HTML);
+    size_t key_len = strlen(key);
+    size_t ph_len = strlen(placeholder);
+
+    /* Count occurrences */
+    int count = 0;
+    const char *p = INDEX_HTML;
+    while ((p = strstr(p, placeholder)) != NULL) { count++; p += ph_len; }
+
+    /* Allocate buffer */
+    size_t out_len = html_len + count * (key_len - ph_len) + 1;
+    char *out = malloc(out_len);
+    if (!out) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    /* Replace all occurrences */
+    char *dst = out;
+    const char *src = INDEX_HTML;
+    while ((p = strstr(src, placeholder)) != NULL) {
+        size_t before = p - src;
+        memcpy(dst, src, before);
+        dst += before;
+        memcpy(dst, key, key_len);
+        dst += key_len;
+        src = p + ph_len;
+    }
+    strcpy(dst, src);
+
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, INDEX_HTML, strlen(INDEX_HTML));
+    httpd_resp_send(req, out, strlen(out));
+    free(out);
     return ESP_OK;
 }
 

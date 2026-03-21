@@ -3,6 +3,7 @@
 #include "nvs.h"
 #include "esp_log.h"
 #include "config.h"
+#include "esp_random.h"
 
 static const char *TAG    = "GW_CONFIG";
 static const char *NVS_NS = "gw_config";
@@ -22,7 +23,7 @@ void gw_config_init(void)
 	strlcpy(s_config.mqtt_password,     "YOUR_MQTT_PASSWORD",               sizeof(s_config.mqtt_password));
     strlcpy(s_config.webhook_url,       "http://your-server.example.com/sms", sizeof(s_config.webhook_url));
     s_config.webhook_enabled = false;
-    strlcpy(s_config.api_key,           "YOUR_API_KEY_32_CHARS_MIN",      sizeof(s_config.api_key));
+    strlcpy(s_config.api_key,           "",      sizeof(s_config.api_key));
 
     /* Override from NVS if saved values exist */
     nvs_handle_t nvs;
@@ -49,6 +50,24 @@ void gw_config_init(void)
         ESP_LOGI(TAG, "Config loaded from NVS.");
     } else {
         ESP_LOGI(TAG, "No NVS config - using defaults.");
+    }
+
+    /* Generate a random API key if still using default or empty */
+    if (s_config.api_key[0] == '\0' ||
+        strcmp(s_config.api_key, "changeme1234567890123456789012") == 0) {
+        const char hex[] = "0123456789abcdef";
+        for (int i = 0; i < GW_API_KEY_LEN - 1; i++) {
+            s_config.api_key[i] = hex[esp_random() % 16];
+        }
+        s_config.api_key[GW_API_KEY_LEN - 1] = '\0';
+        /* Save immediately to NVS */
+        nvs_handle_t nvs;
+        if (nvs_open("gw_config", NVS_READWRITE, &nvs) == ESP_OK) {
+            nvs_set_str(nvs, "api_key", s_config.api_key);
+            nvs_commit(nvs);
+            nvs_close(nvs);
+        }
+        ESP_LOGI(TAG, "Generated new API key and saved to NVS.");
     }
 }
 
