@@ -42,15 +42,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        gw_config_t *cfg = gw_config_get();
-        if (s_retry_num < cfg->wifi_max_retry) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGW(TAG, "Retrying WiFi (%d/%d)...", s_retry_num, cfg->wifi_max_retry);
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            ESP_LOGE(TAG, "WiFi connection failed.");
-        }
+        esp_wifi_connect();
+        s_retry_num++;
+        ESP_LOGW(TAG, "WiFi disconnected, retrying... (attempt %d)", s_retry_num);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -89,6 +83,7 @@ static esp_err_t wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
+    esp_wifi_set_ps(WIFI_PS_NONE);  /* disable power save - mains powered device */
 
     ESP_LOGI(TAG, "Connecting to SSID: %s", gw_cfg->wifi_ssid);
 
@@ -101,6 +96,31 @@ static esp_err_t wifi_init_sta(void)
     }
     ESP_LOGE(TAG, "WiFi failed to connect.");
     return ESP_FAIL;
+}
+
+/* Watchdog task - reboots if WiFi lost for >5 minutes */
+static void watchdog_task(void *arg)
+{
+    static int s_offline_seconds = 0;
+    const int REBOOT_AFTER_SECONDS = 300;  /* 5 minutes */
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(60000));  /* check every 60 seconds */
+
+        if (!(xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT)) {
+            s_offline_seconds += 60;
+            ESP_LOGW(TAG, "Watchdog: WiFi offline for %d seconds", s_offline_seconds);
+            if (s_offline_seconds >= REBOOT_AFTER_SECONDS) {
+                ESP_LOGE(TAG, "Watchdog: offline too long, rebooting...");
+                esp_restart();
+            }
+        } else {
+            if (s_offline_seconds > 0) {
+                ESP_LOGI(TAG, "Watchdog: WiFi back online, resetting counter");
+            }
+            s_offline_seconds = 0;
+        }
+    }
 }
 
 static void on_sms_received(const sms_message_t *msg)
@@ -141,6 +161,10 @@ void app_main(void)
         ESP_LOGW(TAG, "WiFi unavailable - running in modem-only mode.");
     }
 
+    tcp_log_init();
+    /* Start watchdog - monitors WiFi and reboots if offline too long */
+    xTaskCreate(watchdog_task, "watchdog", 2048, NULL, 2, NULL);
+
     httpd_handle_t server = web_server_start();
     if (server) {
         rest_api_register(server);
@@ -148,7 +172,6 @@ void app_main(void)
     }
 
     mqtt_gw_init();
-    tcp_log_init();
     webhook_init();
 
     ESP_LOGI(TAG, "Gateway ready.");

@@ -83,10 +83,10 @@ static esp_err_t handler_status(httpd_req_t *req)
     char buf[512];
     snprintf(buf,sizeof(buf),
         "{\"powered_on\":%s,\"sim_ready\":%s,\"registered\":%s,"
-        "\"rssi\":%d,\"operator\":\"%s\",\"imei\":\"%s\",\"firmware\":\"%s\"}",
+        "\"rssi\":%d,\"operator\":\"%s\",\"imei\":\"%s\",\"firmware\":\"%s\",\"build\":\"%s %s\"}",
         st.powered_on?"true":"false",st.sim_ready?"true":"false",
         st.registered?"true":"false",
-        (st.rssi == 99) ? -999 : (st.rssi * 2) - 113,st.operator_name,st.imei,st.firmware);
+        (st.rssi == 99) ? -999 : (st.rssi * 2) - 113,st.operator_name,st.imei,st.firmware,__DATE__,__TIME__);
     json_resp(req,200,buf);
     return ESP_OK;
 }
