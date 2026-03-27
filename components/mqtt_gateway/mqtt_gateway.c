@@ -101,7 +101,12 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         }
 
         publish_online();
-        publish_discovery();
+        /* Only publish discovery on first connect - HA retains them */
+        static bool s_discovery_done = false;
+        if (!s_discovery_done) {
+            s_discovery_done = true;
+            publish_discovery();
+        }
 
         pub_rel("number/state",      s_number_buf[0]  ? s_number_buf  : "", 1, 1);
         pub_rel("message/state",     s_message_buf[0] ? s_message_buf : "", 1, 1);
@@ -609,6 +614,23 @@ static void publish_discovery(void)
     ESP_LOGI(TAG, "HA auto-discovery complete - 16 entities registered.");
 }
 
+void mqtt_gw_wifi_connected(void)
+{
+    if (s_client) {
+        ESP_LOGI(TAG, "WiFi up - starting MQTT client.");
+        esp_mqtt_client_start(s_client);
+    }
+}
+
+void mqtt_gw_wifi_disconnected(void)
+{
+    if (s_client) {
+        ESP_LOGI(TAG, "WiFi down - stopping MQTT client.");
+        s_connected = false;
+        esp_mqtt_client_stop(s_client);
+    }
+}
+
 void mqtt_gw_init(void)
 {
     gw_config_t *cfg = gw_config_get();
@@ -634,7 +656,7 @@ void mqtt_gw_init(void)
         .session.last_will.msg_len           = 7,
         .session.last_will.qos               = 1,
         .session.last_will.retain            = 1,
-        .session.keepalive                   = 60,
+        .session.keepalive                   = 120,
         .network.reconnect_timeout_ms        = 10000,
     };
 

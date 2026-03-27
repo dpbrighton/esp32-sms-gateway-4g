@@ -15,5 +15,8 @@ idf_component_register(
         esp_wifi
         esp_event
         esp_netif
+        esp_eth
+        esp_driver_gpio
+        mdns
         log
 )

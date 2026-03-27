@@ -16,3 +16,5 @@ dependencies:
   #   public: true
   espressif/mqtt: '*'
   espressif/cjson: '*'
+  espressif/lan87xx: '*'
+  espressif/mdns: '*'
